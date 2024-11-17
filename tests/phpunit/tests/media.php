@@ -6695,11 +6695,14 @@ EOF;
 	 * @ticket 62365
 	 */
 	public function test_output_format_mappings_with_plugin_overrides() {
-		add_filter( 'image_editor_output_format', function( $formats ) {
-			$formats['image/heic'] = 'image/webp';
-			$formats['image/jpeg'] = 'image/avif';
-			return $formats;
-		});
+		add_filter(
+			'image_editor_output_format',
+			function( $formats ) {
+				$formats['image/heic'] = 'image/webp';
+				$formats['image/jpeg'] = 'image/avif';
+				return $formats;
+			}
+		);
 
 		$filename = 'test-image.heic';
 		$mime_type = 'image/heic';
@@ -6716,7 +6719,7 @@ EOF;
 		$this->assertSame( $expected, $actual );
 
 		remove_all_filters( 'image_editor_output_format' );
-    }
+	}
 }
 
 /**
