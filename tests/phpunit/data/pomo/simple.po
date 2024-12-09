@@ -52,3 +52,5 @@ msgstr ""
 msgid "a\""
 msgstr ""
 
+msgid "You must provide at least one recipient email address."
+msgstr "Vous devez fournir au moins une adresse e-mail de destinataire."
