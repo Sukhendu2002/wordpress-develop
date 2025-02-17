@@ -11,17 +11,25 @@ if ( is_multisite() ) :
 	class Tests_Multisite_Populate_Network extends WP_UnitTestCase {
 		protected $network_args;
 		protected static $site_user_id;
+		protected $is_multisite_backup;
 
 		public function set_up() {
 			parent::set_up();
 			$this->network_args = array(
 				'network_id'        => 2,
 				'domain'            => 'example.org',
-				'email'             => 'admin@example.org',
 				'site_name'         => 'Test Network',
 				'path'              => '/',
 				'subdomain_install' => false,
+				'email'             => 'admin@example.org',
 			);
+		}
+
+		public function tear_down() {
+			if ( isset( $this->is_multisite_backup ) ) {
+				$GLOBALS['is_multisite'] = $this->is_multisite_backup;
+			}
+			parent::tear_down();
 		}
 
 		/**
@@ -87,6 +95,9 @@ if ( is_multisite() ) :
 		 * @ticket 27289
 		 */
 		public function test_after_upgrade_to_multisite_action() {
+			$this->is_multisite_backup = $GLOBALS['is_multisite'];
+			$GLOBALS['is_multisite']   = false;
+
 			$fired = 0;
 			add_action(
 				'after_upgrade_to_multisite',
