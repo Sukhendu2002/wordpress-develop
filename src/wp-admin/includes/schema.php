@@ -986,7 +986,23 @@ endif;
 function populate_network( $network_id = 1, $domain = '', $email = '', $site_name = '', $path = '/', $subdomain_install = false ) {
 	global $wpdb, $current_site, $wp_rewrite;
 
-	$network_id = (int) $network_id;
+	$network_args = array(
+		'network_id'        => $network_id,
+		'domain'            => $domain,
+		'site_name'         => $site_name,
+		'path'              => $path,
+		'subdomain_install' => $subdomain_install,
+		'email'             => $email,
+	);
+
+	/**
+	 * Fires before the populate network.
+	 *
+	 * @since 6.8.0
+	 *
+	 * @param array $network_args Network args.
+	 */
+	do_action( 'before_populate_network', $network_args );
 
 	$errors = new WP_Error();
 	if ( '' === $domain ) {
@@ -999,13 +1015,11 @@ function populate_network( $network_id = 1, $domain = '', $email = '', $site_nam
 	// Check for network collision.
 	$network_exists = false;
 	if ( is_multisite() ) {
-		if ( get_network( $network_id ) ) {
+		if ( get_network( (int) $network_id ) ) {
 			$errors->add( 'siteid_exists', __( 'The network already exists.' ) );
 		}
 	} else {
-		if ( $network_id === (int) $wpdb->get_var(
-			$wpdb->prepare( "SELECT id FROM $wpdb->site WHERE id = %d", $network_id )
-		) ) {
+		if ( (int) $network_id === $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $wpdb->site WHERE id = %d", $network_id ) ) ) {
 			$errors->add( 'siteid_exists', __( 'The network already exists.' ) );
 		}
 	}
@@ -1018,7 +1032,7 @@ function populate_network( $network_id = 1, $domain = '', $email = '', $site_nam
 		return $errors;
 	}
 
-	if ( 1 === $network_id ) {
+	if ( 1 === (int) $network_id ) {
 		$wpdb->insert(
 			$wpdb->site,
 			array(
@@ -1107,6 +1121,16 @@ function populate_network( $network_id = 1, $domain = '', $email = '', $site_nam
 
 		flush_rewrite_rules();
 
+		/**
+		 * Fires after the creation of a new multisite instance.
+		 *
+		 * @since 6.8.0
+		 *
+		 * @param array $network_args Network args.
+		 * @param int   $site_user_id ID of the user.
+		 */
+		do_action( 'after_upgrade_to_multisite', $network_args, $site_user_id );
+
 		if ( ! $subdomain_install ) {
 			return true;
 		}
@@ -1124,7 +1148,7 @@ function populate_network( $network_id = 1, $domain = '', $email = '', $site_nam
 		if ( is_wp_error( $page ) ) {
 			$errstr = $page->get_error_message();
 		} elseif ( 200 === wp_remote_retrieve_response_code( $page ) ) {
-				$vhost_ok = true;
+			$vhost_ok = true;
 		}
 
 		if ( ! $vhost_ok ) {
@@ -1152,6 +1176,16 @@ function populate_network( $network_id = 1, $domain = '', $email = '', $site_nam
 			return new WP_Error( 'no_wildcard_dns', $msg );
 		}
 	}
+
+	/**
+	 * Fires after the creation of new network.
+	 *
+	 * @since 6.8.0
+	 *
+	 * @param array $network_args Network args.
+	 * @param int   $site_user_id ID of the user.
+	 */
+	do_action( 'after_populate_network', $network_args, $site_user_id );
 
 	return true;
 }
