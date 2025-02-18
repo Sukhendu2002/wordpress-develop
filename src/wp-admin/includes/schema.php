@@ -986,6 +986,7 @@ endif;
 function populate_network( $network_id = 1, $domain = '', $email = '', $site_name = '', $path = '/', $subdomain_install = false ) {
 	global $wpdb, $current_site, $wp_rewrite;
 
+	$network_id   = (int) $network_id;
 	$network_args = array(
 		'network_id'        => $network_id,
 		'domain'            => $domain,
@@ -1015,11 +1016,11 @@ function populate_network( $network_id = 1, $domain = '', $email = '', $site_nam
 	// Check for network collision.
 	$network_exists = false;
 	if ( is_multisite() ) {
-		if ( get_network( (int) $network_id ) ) {
+		if ( get_network( $network_id ) ) {
 			$errors->add( 'siteid_exists', __( 'The network already exists.' ) );
 		}
 	} else {
-		if ( (int) $network_id === (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $wpdb->site WHERE id = %d", (int)$network_id ) ) ) {
+		if ( $network_id === (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $wpdb->site WHERE id = %d", $network_id ) ) ) {
 			$errors->add( 'siteid_exists', __( 'The network already exists.' ) );
 		}
 	}
@@ -1032,7 +1033,7 @@ function populate_network( $network_id = 1, $domain = '', $email = '', $site_nam
 		return $errors;
 	}
 
-	if ( 1 === (int) $network_id ) {
+	if ( 1 === $network_id ) {
 		$wpdb->insert(
 			$wpdb->site,
 			array(
@@ -1047,13 +1048,13 @@ function populate_network( $network_id = 1, $domain = '', $email = '', $site_nam
 			array(
 				'domain' => $domain,
 				'path'   => $path,
-				'id'     => (int) $network_id,
+				'id'     => $network_id,
 			)
 		);
 	}
 
 	populate_network_meta(
-		(int) $network_id,
+		$network_id,
 		array(
 			'admin_email'       => $email,
 			'site_name'         => $site_name,
