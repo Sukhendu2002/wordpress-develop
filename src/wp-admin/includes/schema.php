@@ -1019,7 +1019,7 @@ function populate_network( $network_id = 1, $domain = '', $email = '', $site_nam
 			$errors->add( 'siteid_exists', __( 'The network already exists.' ) );
 		}
 	} else {
-		if ( (int) $network_id === $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $wpdb->site WHERE id = %d", $network_id ) ) ) {
+		if ( (int) $network_id === (int) $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $wpdb->site WHERE id = %d", (int)$network_id ) ) ) {
 			$errors->add( 'siteid_exists', __( 'The network already exists.' ) );
 		}
 	}
@@ -1047,13 +1047,13 @@ function populate_network( $network_id = 1, $domain = '', $email = '', $site_nam
 			array(
 				'domain' => $domain,
 				'path'   => $path,
-				'id'     => $network_id,
+				'id'     => (int) $network_id,
 			)
 		);
 	}
 
 	populate_network_meta(
-		$network_id,
+		(int) $network_id,
 		array(
 			'admin_email'       => $email,
 			'site_name'         => $site_name,
@@ -1081,7 +1081,7 @@ function populate_network( $network_id = 1, $domain = '', $email = '', $site_nam
 		$wpdb->insert(
 			$wpdb->blogs,
 			array(
-				'site_id'    => $network_id,
+				'site_id'    => (int) $network_id,
 				'blog_id'    => 1,
 				'domain'     => $domain,
 				'path'       => $path,
@@ -1096,7 +1096,7 @@ function populate_network( $network_id = 1, $domain = '', $email = '', $site_nam
 				FROM $wpdb->sitemeta
 				WHERE meta_key = %s AND site_id = %d",
 				'admin_user_id',
-				$network_id
+				(int) $network_id
 			)
 		);
 
@@ -1107,7 +1107,7 @@ function populate_network( $network_id = 1, $domain = '', $email = '', $site_nam
 		$wpdb->insert(
 			$wpdb->sitemeta,
 			array(
-				'site_id'    => $network_id,
+				'site_id'    => (int) $network_id,
 				'meta_key'   => 'main_site',
 				'meta_value' => $current_site->blog_id,
 			)

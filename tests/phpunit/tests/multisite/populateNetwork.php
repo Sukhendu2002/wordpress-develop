@@ -10,7 +10,6 @@ if ( is_multisite() ) :
 	 */
 	class Tests_Multisite_Populate_Network extends WP_UnitTestCase {
 		protected $network_args;
-		protected static $site_user_id;
 		protected $is_multisite_backup;
 
 		public function set_up() {
