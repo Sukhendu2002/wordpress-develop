@@ -543,7 +543,7 @@ class Parser implements RegistryAware
                     // element. Use this to replace title with a strip_tags version so
                     // that alt text from images is not included in the title.
                     if ($entry['properties']['content'][0]['value'] === $title) {
-                        $title = strip_tags($entry['properties']['content'][0]['html']);
+                        $title = wp_strip_all_tags($entry['properties']['content'][0]['html']);
                         $item['title'] = [['data' => $title]];
                     }
                     $description .= $entry['properties']['content'][0]['html'];
