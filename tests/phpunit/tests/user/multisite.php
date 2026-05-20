@@ -479,4 +479,122 @@ class Tests_User_Multisite extends WP_UnitTestCase {
 
 		$this->assertTrue( $result );
 	}
+
+	/**
+	 * Roles should be recovered when the option_name prefix doesn't match
+	 * the current table prefix after a migration.
+	 *
+	 * @ticket 65241
+	 * @dataProvider data_roles_prefix_mismatch
+	 *
+	 * @param string $wrong_key_template Template with %d for blog_id placeholder.
+	 * @param bool   $use_main_site      Whether to test on the main site (blog 1).
+	 * @param bool   $switch_first       Whether to switch_to_blog before initializing WP_Roles.
+	 */
+	public function test_roles_recovered_after_prefix_mismatch( $wrong_key_template, $use_main_site, $switch_first ) {
+		global $wpdb;
+
+		if ( $use_main_site ) {
+			$blog_id = 1;
+		} else {
+			$blog_id = self::factory()->blog->create();
+		}
+
+		$correct_key = $wpdb->get_blog_prefix( $blog_id ) . 'user_roles';
+		$wrong_key   = sprintf( $wrong_key_template, $blog_id );
+
+		if ( $switch_first ) {
+			switch_to_blog( $blog_id );
+			$saved_roles = get_option( $correct_key );
+		} else {
+			$saved_roles = get_blog_option( $blog_id, $correct_key );
+		}
+
+		$this->assertNotEmpty( $saved_roles, 'Roles should exist initially.' );
+
+		if ( $switch_first ) {
+			update_option( $wrong_key, $saved_roles );
+			delete_option( $correct_key );
+		} else {
+			update_blog_option( $blog_id, $wrong_key, $saved_roles );
+			delete_blog_option( $blog_id, $correct_key );
+		}
+
+		try {
+			$fresh_roles = new WP_Roles( $blog_id );
+
+			$this->assertNotEmpty( $fresh_roles->roles, 'Roles should be recovered from mismatched prefix key.' );
+			$this->assertSame( $saved_roles, $fresh_roles->roles, 'Recovered roles should match original.' );
+
+			if ( $switch_first ) {
+				$this->assertNotEmpty( get_option( $correct_key ), 'Correct key should be restored after recovery.' );
+				$this->assertFalse( get_option( $wrong_key ), 'Wrong key should be removed after recovery.' );
+			} else {
+				$this->assertNotEmpty( get_blog_option( $blog_id, $correct_key ), 'Correct key should be restored on target blog.' );
+				$this->assertFalse( get_blog_option( $blog_id, $wrong_key ), 'Wrong key should be removed from target blog.' );
+			}
+		} finally {
+			if ( $switch_first ) {
+				if ( ! get_option( $correct_key ) ) {
+					update_option( $correct_key, $saved_roles, true );
+				}
+				delete_option( $wrong_key );
+				restore_current_blog();
+			} else {
+				if ( ! get_blog_option( $blog_id, $correct_key ) ) {
+					update_blog_option( $blog_id, $correct_key, $saved_roles );
+				}
+				delete_blog_option( $blog_id, $wrong_key );
+			}
+		}
+	}
+
+	/**
+	 * Data provider for test_roles_recovered_after_prefix_mismatch.
+	 *
+	 * @return array[]
+	 */
+	public function data_roles_prefix_mismatch() {
+		return array(
+			'subsite with underscore prefix, switched'     => array( 'oldprefix_%d_user_roles', false, true ),
+			'subsite without underscore prefix, switched'  => array( 'oldprefix%d_user_roles', false, true ),
+			'subsite with underscore prefix, not switched' => array( 'oldprefix_%d_user_roles', false, false ),
+			'main site, switched'                          => array( 'oldprefix_user_roles', true, true ),
+		);
+	}
+
+	/**
+	 * Fallback should return empty when multiple ambiguous candidates exist.
+	 *
+	 * @ticket 65241
+	 */
+	public function test_roles_fallback_returns_empty_on_ambiguous_match() {
+		global $wpdb;
+
+		$blog_id = self::factory()->blog->create();
+
+		switch_to_blog( $blog_id );
+
+		$correct_key = $wpdb->get_blog_prefix( $blog_id ) . 'user_roles';
+		$wrong_key_1 = 'oldprefix_' . $blog_id . '_user_roles';
+		$wrong_key_2 = 'anotherprefix_' . $blog_id . '_user_roles';
+
+		$saved_roles = get_option( $correct_key );
+		$this->assertNotEmpty( $saved_roles, 'Roles should exist initially.' );
+
+		update_option( $wrong_key_1, $saved_roles );
+		update_option( $wrong_key_2, $saved_roles );
+		delete_option( $correct_key );
+
+		try {
+			$fresh_roles = new WP_Roles( $blog_id );
+
+			$this->assertEmpty( $fresh_roles->roles, 'Roles should be empty when multiple ambiguous candidates exist.' );
+		} finally {
+			update_option( $correct_key, $saved_roles, true );
+			delete_option( $wrong_key_1 );
+			delete_option( $wrong_key_2 );
+			restore_current_blog();
+		}
+	}
 }

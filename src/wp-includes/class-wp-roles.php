@@ -377,16 +377,129 @@ class WP_Roles {
 			return $wp_user_roles;
 		}
 
+		$sentinel = '__roles_not_found';
+
 		if ( is_multisite() && get_current_blog_id() !== $this->site_id ) {
 			remove_action( 'switch_blog', 'wp_switch_roles_and_user', 1 );
 
-			$roles = get_blog_option( $this->site_id, $this->role_key, array() );
+			$roles = get_blog_option( $this->site_id, $this->role_key, $sentinel );
+
+			if ( $sentinel === $roles ) {
+				switch_to_blog( $this->site_id );
+				$roles = $this->get_roles_data_fallback();
+				restore_current_blog();
+			}
 
 			add_action( 'switch_blog', 'wp_switch_roles_and_user', 1, 2 );
 
-			return $roles;
+			return is_array( $roles ) ? $roles : array();
 		}
 
-		return get_option( $this->role_key, array() );
+		$roles = get_option( $this->role_key, $sentinel );
+
+		if ( $sentinel === $roles && is_multisite() ) {
+			$roles = $this->get_roles_data_fallback();
+		}
+
+		return is_array( $roles ) ? $roles : array();
+	}
+
+	/**
+	 * Attempts to recover roles when the option_name has a mismatched prefix.
+	 *
+	 * This handles cases where a migration tool changes the database table prefix
+	 * but fails to update the user_roles option_name inside the options table.
+	 *
+	 * Must be called while switched to the target site so $wpdb->options
+	 * points to the correct table.
+	 *
+	 * @since 7.0.1
+	 *
+	 * @global wpdb $wpdb WordPress database abstraction object.
+	 *
+	 * @return array Roles array, or empty array if recovery fails.
+	 */
+	private function get_roles_data_fallback() {
+		global $wpdb;
+
+		/*
+		 * Build the LIKE pattern for this site's user_roles option.
+		 *
+		 * For the main site (ID 1), get_blog_prefix() returns just the base prefix,
+		 * so the option is {prefix}user_roles. The stale key would be {old_prefix}user_roles.
+		 *
+		 * For subsites, the option is {prefix}{site_id}_user_roles.
+		 * The stale key would be {old_prefix}{site_id}_user_roles.
+		 */
+		if ( defined( 'MULTISITE' ) && ( 0 === $this->site_id || 1 === $this->site_id ) ) {
+			$like    = $wpdb->esc_like( 'user_roles' );
+			$pattern = '%' . $like;
+		} else {
+			$like    = $wpdb->esc_like( $this->site_id . '_user_roles' );
+			$pattern = '%' . $like;
+		}
+
+		$results = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT option_name, option_value FROM $wpdb->options WHERE option_name LIKE %s",
+				$pattern
+			)
+		);
+
+		if ( ! $results ) {
+			return array();
+		}
+
+		$valid_candidate = null;
+
+		foreach ( $results as $row ) {
+			if ( $row->option_name === $this->role_key ) {
+				continue;
+			}
+
+			$candidate = maybe_unserialize( $row->option_value );
+
+			if ( ! is_array( $candidate ) || empty( $candidate ) ) {
+				continue;
+			}
+
+			// Verify every entry has the expected role shape.
+			$is_valid = true;
+			foreach ( $candidate as $role_data ) {
+				if ( ! is_array( $role_data )
+					|| ! isset( $role_data['name'], $role_data['capabilities'] )
+					|| ! is_string( $role_data['name'] )
+					|| ! is_array( $role_data['capabilities'] )
+				) {
+					$is_valid = false;
+					break;
+				}
+			}
+
+			if ( ! $is_valid ) {
+				continue;
+			}
+
+			if ( null !== $valid_candidate ) {
+				// Ambiguous: more than one valid candidate. Do not proceed.
+				return array();
+			}
+
+			$valid_candidate = array(
+				'option_name' => $row->option_name,
+				'roles'       => $candidate,
+			);
+		}
+
+		if ( null === $valid_candidate ) {
+			return array();
+		}
+
+		// Correct the mismatched option_name for future lookups.
+		if ( update_option( $this->role_key, $valid_candidate['roles'], true ) ) {
+			delete_option( $valid_candidate['option_name'] );
+		}
+
+		return $valid_candidate['roles'];
 	}
 }
