@@ -8,8 +8,17 @@
  */
 class Tests_Robots extends WP_UnitTestCase {
 
+	/**
+	 * The `wp_robots` callbacks registered by default, captured before they are removed.
+	 *
+	 * @var WP_Hook|null
+	 */
+	private $default_wp_robots_hook;
+
 	public function set_up() {
 		parent::set_up();
+
+		$this->default_wp_robots_hook = isset( $GLOBALS['wp_filter']['wp_robots'] ) ? clone $GLOBALS['wp_filter']['wp_robots'] : null;
 
 		$this->set_permalink_structure( '/%postname%/' );
 		remove_all_filters( 'wp_robots' );
@@ -167,6 +176,101 @@ class Tests_Robots extends WP_UnitTestCase {
 
 		$output = get_echo( 'wp_robots' );
 		$this->assertStringNotContainsString( 'noindex', $output );
+	}
+
+	/**
+	 * Restores the `wp_robots` callbacks that WordPress registers by default.
+	 */
+	private function restore_default_wp_robots_filters() {
+		if ( $this->default_wp_robots_hook ) {
+			$GLOBALS['wp_filter']['wp_robots'] = $this->default_wp_robots_hook;
+		}
+	}
+
+	/**
+	 * @ticket 58751
+	 * @covers ::wp_robots_noindex_404
+	 */
+	public function test_wp_robots_noindex_404_is_hooked_by_default() {
+		$this->restore_default_wp_robots_filters();
+		$this->go_to( '/this-page-does-not-exist' );
+
+		$this->assertTrue( is_404() );
+		$this->assertSame( "<meta name='robots' content='noindex, follow, max-image-preview:large' />\n", get_echo( 'wp_robots' ) );
+	}
+
+	/**
+	 * @ticket 58751
+	 * @covers ::wp_robots_noindex_404
+	 */
+	public function test_wp_robots_404_page_with_public_site_and_search_callback_outputs_one_noindex() {
+		update_option( 'blog_public', '1' );
+		add_filter( 'wp_robots', 'wp_robots_noindex' );
+		add_filter( 'wp_robots', 'wp_robots_noindex_search' );
+		add_filter( 'wp_robots', 'wp_robots_noindex_404' );
+		$this->go_to( '/this-page-does-not-exist' );
+
+		$output = get_echo( 'wp_robots' );
+
+		$this->assertSame( "<meta name='robots' content='noindex, follow' />\n", $output );
+	}
+
+	/**
+	 * @ticket 58751
+	 * @covers ::wp_robots_noindex_404
+	 */
+	public function test_wp_robots_noindex_404_can_be_overridden_by_later_filter() {
+		$this->restore_default_wp_robots_filters();
+		add_filter(
+			'wp_robots',
+			static function ( array $robots ) {
+				$robots['noindex'] = false;
+				return $robots;
+			},
+			20
+		);
+		$this->go_to( '/this-page-does-not-exist' );
+
+		$this->assertTrue( is_404() );
+		$this->assertSame( "<meta name='robots' content='follow, max-image-preview:large' />\n", get_echo( 'wp_robots' ) );
+		$this->assertTrue( wp_robots_noindex_404( array() )['noindex'], 'The callback itself should still add noindex.' );
+	}
+
+	/**
+	 * @ticket 58751
+	 * @covers ::wp_robots_noindex_404
+	 */
+	public function test_wp_robots_noindex_404_preserves_existing_directives() {
+		$this->go_to( '/this-page-does-not-exist' );
+
+		$robots = wp_robots_noindex_404( array( 'max-image-preview' => 'large' ) );
+
+		$this->assertSame( 'large', $robots['max-image-preview'] );
+		$this->assertTrue( $robots['noindex'] );
+	}
+
+	/**
+	 * The wp_die() screen can render before a query exists, so is_404() must not run.
+	 *
+	 * @ticket 58751
+	 * @covers ::_default_wp_die_handler
+	 */
+	public function test_default_wp_die_handler_does_not_call_is_404() {
+		$this->restore_default_wp_robots_filters();
+		$this->go_to( '/this-page-does-not-exist' );
+
+		$wp_query = $GLOBALS['wp_query'];
+		unset( $GLOBALS['wp_query'] );
+
+		ob_start();
+		_default_wp_die_handler( 'Synthetic message', 'Synthetic title', array( 'exit' => false ) );
+		$output = ob_get_clean();
+
+		$GLOBALS['wp_query'] = $wp_query;
+
+		$this->assertSame( 1, substr_count( $output, '<meta name=\'robots\'' ), 'Only one robots meta tag should be output.' );
+		$this->assertSame( 1, substr_count( $output, 'noindex' ), 'The noindex directive should not be duplicated.' );
+		$this->assertFalse( has_filter( 'wp_robots', 'wp_robots_noindex_404' ) );
 	}
 
 	public function add_noindex_directive( array $robots ) {
