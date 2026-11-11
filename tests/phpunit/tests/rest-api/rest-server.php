@@ -1527,6 +1527,37 @@ class Tests_REST_Server extends WP_Test_REST_TestCase {
 		$this->assertArrayNotHasKey( '/test/another/route', $data['routes'] );
 	}
 
+	/**
+	 * @ticket 66653
+	 * @covers WP_REST_Server::get_namespace_index
+	 *
+	 * @dataProvider data_get_namespace_index_with_array_namespace
+	 *
+	 * @param array $invalid_namespace Invalid namespace.
+	 */
+	public function test_get_namespace_index_should_reject_array_namespace( $invalid_namespace ) {
+		$request = new WP_REST_Request( 'GET', '/wp/v2' );
+		$request->set_query_params( array( 'namespace' => $invalid_namespace ) );
+
+		$response = rest_get_server()->dispatch( $request );
+
+		$this->assertErrorResponse( 'rest_invalid_namespace', $response, 404 );
+	}
+
+	/**
+	 * Data provider for test_get_namespace_index_should_reject_array_namespace().
+	 *
+	 * @return array
+	 */
+	public static function data_get_namespace_index_with_array_namespace() {
+		return array(
+			'empty array'       => array( array() ),
+			'indexed array'     => array( array( 'a' ) ),
+			'associative array' => array( array( 'key' => 'a' ) ),
+			'nested array'      => array( array( array( 'a' ) ) ),
+		);
+	}
+
 	public function test_get_namespaces() {
 		$server = new WP_REST_Server();
 		$server->register_route(
